@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobFinder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>JobFinder</h1>
+        </div>
+        <div class="nav-links">
+            <a href="#/" class="nav-link active" data-route="feed">Jobs</a>
+            <a href="#/stats" class="nav-link" data-route="stats">Dashboard</a>
+        </div>
+        <div class="nav-actions">
+            <button id="scrape-btn" class="btn btn-primary btn-sm">Scrape Now</button>
+            <button id="theme-toggle" class="btn btn-ghost btn-sm">Toggle Theme</button>
+        </div>
+    </nav>
+
+    <main class="container" id="app">
+        <!-- Views rendered here by JS -->
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
