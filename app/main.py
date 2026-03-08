@@ -229,6 +229,28 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             "cover_letter": result.get("cover_letter", ""),
         }
 
+    @app.post("/api/jobs/{job_id}/estimate-salary")
+    async def estimate_salary_endpoint(job_id: int):
+        from app.salary_estimator import estimate_salary
+        job = await app.state.db.get_job(job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        client = getattr(app.state, "ai_client", None)
+        if not client:
+            raise HTTPException(503, "No AI provider configured")
+        # Skip if salary already known from listing
+        if job.get("salary_min") and job.get("salary_max"):
+            return {"ok": True, "already_known": True,
+                    "min": job["salary_min"], "max": job["salary_max"]}
+        result = await estimate_salary(client, job)
+        if result.get("min") and result["min"] > 0:
+            await app.state.db.update_job_contact(job_id,
+                salary_estimate_min=result["min"],
+                salary_estimate_max=result["max"],
+                salary_confidence=result.get("confidence", "low"),
+            )
+        return {"ok": True, **result}
+
     @app.post("/api/jobs/{job_id}/find-apply-link")
     async def find_apply_link(job_id: int):
         from app.apply_link_finder import find_apply_url

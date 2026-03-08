@@ -355,6 +355,13 @@ function createJobCard(job) {
     const freshness = getFreshness(job);
     const freshnessHtml = freshness ? `<span class="freshness-badge ${freshness.class}">${freshness.label}</span>` : '';
 
+    let cardSalaryHtml = '';
+    if (salary) {
+        cardSalaryHtml = `<span>${salary}</span>`;
+    } else if (job.salary_estimate_min && job.salary_estimate_max) {
+        cardSalaryHtml = `<span style="opacity:0.8">~${formatSalary(job.salary_estimate_min, job.salary_estimate_max)}</span>`;
+    }
+
     card.innerHTML = `
         <div class="job-card-content">
             <div class="job-card-header">
@@ -365,7 +372,7 @@ function createJobCard(job) {
             <span class="job-card-company">${escapeHtml(job.company)}</span>
             <div class="job-card-meta">
                 ${job.location ? `<span>${escapeHtml(job.location)}</span>` : ''}
-                ${salary ? `<span>${salary}</span>` : ''}
+                ${cardSalaryHtml}
                 <span>${formatDate(job.created_at)}</span>
                 ${freshnessHtml}
             </div>
@@ -427,6 +434,22 @@ function renderJobDetailContent(container, job, profile = {}) {
     const sources = job.sources || [];
     const application = job.application;
 
+    const hasSalary = job.salary_min && job.salary_max;
+    const hasEstimate = job.salary_estimate_min && job.salary_estimate_max;
+    let salaryHtml = '';
+    if (hasSalary) {
+        salaryHtml = `<span>${formatSalary(job.salary_min, job.salary_max)}</span>`;
+    } else if (hasEstimate) {
+        const conf = job.salary_confidence || 'low';
+        const confColor = conf === 'high' ? '#22c55e' : conf === 'medium' ? '#f59e0b' : '#94a3b8';
+        salaryHtml = `
+            <span style="opacity:0.8">~${formatSalary(job.salary_estimate_min, job.salary_estimate_max)}</span>
+            <span style="font-size:0.75rem;color:${confColor};margin-left:4px">(${conf} confidence)</span>
+        `;
+    } else {
+        salaryHtml = `<button class="btn btn-ghost btn-sm" id="estimate-salary-btn" style="font-size:0.8125rem">Estimate Salary</button>`;
+    }
+
     const reasonsHtml = (score?.match_reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
     const concernsHtml = (score?.concerns || []).map(c => `<li>${escapeHtml(c)}</li>`).join('');
 
@@ -447,7 +470,7 @@ function renderJobDetailContent(container, job, profile = {}) {
             <div class="detail-company">${escapeHtml(job.company)}</div>
             <div class="detail-meta">
                 ${job.location ? `<span>${escapeHtml(job.location)}</span>` : ''}
-                ${salary ? `<span>${salary}</span>` : ''}
+                ${salaryHtml}
                 <span>${formatDate(job.posted_date || job.created_at)}</span>
                 ${freshnessHtml}
                 ${staleWarning}
@@ -605,6 +628,30 @@ function renderJobDetailContent(container, job, profile = {}) {
         e.preventDefault();
         navigate('#/');
     });
+
+    const estSalaryBtn = document.getElementById('estimate-salary-btn');
+    if (estSalaryBtn) {
+        estSalaryBtn.addEventListener('click', async () => {
+            estSalaryBtn.disabled = true;
+            estSalaryBtn.innerHTML = '<span class="spinner"></span>';
+            try {
+                const result = await api.request('POST', `/api/jobs/${job.id}/estimate-salary`);
+                if (result.min && result.min > 0) {
+                    showToast(`Estimated: ${formatSalary(result.min, result.max)} (${result.confidence})`, 'success');
+                    const updated = await api.getJob(job.id);
+                    renderJobDetailContent(container, updated);
+                } else {
+                    showToast('Could not estimate salary', 'info');
+                    estSalaryBtn.disabled = false;
+                    estSalaryBtn.textContent = 'Estimate Salary';
+                }
+            } catch (err) {
+                showToast(err.message, 'error');
+                estSalaryBtn.disabled = false;
+                estSalaryBtn.textContent = 'Estimate Salary';
+            }
+        });
+    }
 
     document.getElementById('prepare-btn').addEventListener('click', async () => {
         const btn = document.getElementById('prepare-btn');
