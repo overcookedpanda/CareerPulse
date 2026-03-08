@@ -379,7 +379,9 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
     @app.post("/api/profile")
     async def update_profile(request: Request):
         body = await request.json()
-        await app.state.db.save_user_profile(**body)
+        allowed = {"full_name", "email", "phone", "location", "linkedin_url", "github_url", "portfolio_url"}
+        filtered = {k: v for k, v in body.items() if k in allowed}
+        await app.state.db.save_user_profile(**filtered)
         return {"ok": True}
 
     @app.get("/api/search-config")
