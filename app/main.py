@@ -438,6 +438,14 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             headers={"Content-Disposition": 'attachment; filename="careerpulse-export.csv"'},
         )
 
+    @app.get("/api/digest")
+    async def get_digest(
+        min_score: int = Query(60),
+        hours: int = Query(24),
+    ):
+        from app.digest import generate_digest
+        return await generate_digest(app.state.db, min_score, hours)
+
     @app.post("/api/clear-jobs")
     async def clear_jobs():
         await app.state.db.clear_jobs()

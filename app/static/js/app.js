@@ -964,6 +964,15 @@ async function renderStats(container) {
                     </div>
                 </div>
             </div>
+            <div class="card" style="padding:24px;margin-top:24px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <h2 style="font-size:1.125rem;font-weight:600;margin:0">Daily Digest</h2>
+                    <button class="btn btn-secondary btn-sm" id="copy-digest-btn">Copy to Clipboard</button>
+                </div>
+                <div id="digest-container">
+                    <div class="loading-container"><span class="spinner"></span></div>
+                </div>
+            </div>
         `;
 
         document.getElementById('stats-scrape-btn').addEventListener('click', handleScrape);
@@ -981,6 +990,38 @@ async function renderStats(container) {
         document.getElementById('stats-export-btn').addEventListener('click', () => {
             window.location.href = '/api/export/csv';
         });
+
+        // Fetch digest
+        try {
+            const digest = await api.request('GET', '/api/digest');
+            const digestContainer = document.getElementById('digest-container');
+            if (digest.job_count === 0) {
+                digestContainer.innerHTML = '<div style="font-size:0.875rem;color:var(--text-tertiary)">No new matches in the last 24 hours.</div>';
+            } else {
+                digestContainer.innerHTML = `
+                    <div style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:12px">${digest.job_count} new match${digest.job_count !== 1 ? 'es' : ''} in the last 24 hours</div>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        ${digest.jobs.map(j => `
+                            <a href="#/job/${j.id}" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-surface-secondary);border-radius:var(--radius-sm);text-decoration:none">
+                                <div>
+                                    <div style="font-size:0.875rem;font-weight:500;color:var(--text-primary)">${escapeHtml(j.title)}</div>
+                                    <div style="font-size:0.75rem;color:var(--text-tertiary)">${escapeHtml(j.company)}${j.location ? ' · ' + escapeHtml(j.location) : ''}</div>
+                                </div>
+                                <span class="score-badge ${getScoreClass(j.match_score)}" style="font-size:0.75rem">${j.match_score}</span>
+                            </a>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            // Copy digest button
+            document.getElementById('copy-digest-btn').addEventListener('click', () => {
+                copyToClipboard(digest.body);
+                showToast('Digest copied to clipboard', 'success');
+            });
+        } catch (err) {
+            document.getElementById('digest-container').innerHTML = '<div style="font-size:0.8125rem;color:var(--text-tertiary)">Could not load digest.</div>';
+        }
     } catch (err) {
         showToast(err.message, 'error');
         container.innerHTML = `
