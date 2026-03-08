@@ -1089,6 +1089,22 @@ a:hover {
     }
 }
 
+/* === Timeline === */
+.timeline { display: flex; flex-direction: column; gap: 0; }
+.timeline-event {
+    display: flex; gap: 12px; padding: 12px 0;
+    border-left: 2px solid var(--border); margin-left: 12px; padding-left: 16px;
+    position: relative;
+}
+.timeline-event::before {
+    content: ''; position: absolute; left: -5px; top: 16px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--bg-surface);
+}
+.timeline-icon { font-size: 1rem; flex-shrink: 0; }
+.timeline-detail { font-size: 0.875rem; color: var(--text-secondary); }
+.timeline-time { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 2px; }
+
 /* === PDF Download Cards === */
 .pdf-download-card {
     margin-bottom: 12px;

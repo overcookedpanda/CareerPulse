@@ -207,6 +207,62 @@ async def test_update_search_terms(client, app):
 
 
 @pytest.mark.asyncio
+async def test_add_event(client, app):
+    db = app.state.db
+    job_id = await db.insert_job(
+        title="Engineer", company="Acme", location="Remote",
+        salary_min=150000, salary_max=200000,
+        description="Build things", url="https://example.com/job-event",
+        posted_date="2026-01-01", application_method="url",
+        contact_email=None,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/events", json={"detail": "Looks great"})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    resp = await client.get(f"/api/jobs/{job_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "events" in data
+    assert len(data["events"]) == 1
+    assert data["events"][0]["event_type"] == "note"
+    assert data["events"][0]["detail"] == "Looks great"
+
+
+@pytest.mark.asyncio
+async def test_add_event_empty_detail(client, app):
+    db = app.state.db
+    job_id = await db.insert_job(
+        title="Engineer", company="Acme", location="Remote",
+        salary_min=150000, salary_max=200000,
+        description="Build things", url="https://example.com/job-event-empty",
+        posted_date="2026-01-01", application_method="url",
+        contact_email=None,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/events", json={"detail": ""})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_status_change_creates_event(client, app):
+    db = app.state.db
+    job_id = await db.insert_job(
+        title="Engineer", company="Acme", location="Remote",
+        salary_min=150000, salary_max=200000,
+        description="Build things", url="https://example.com/job-status-event",
+        posted_date="2026-01-01", application_method="url",
+        contact_email=None,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/application?status=applied")
+    assert resp.status_code == 200
+
+    events = await db.get_events(job_id)
+    assert len(events) == 1
+    assert events[0]["event_type"] == "status_change"
+    assert "applied" in events[0]["detail"]
+
+
+@pytest.mark.asyncio
 async def test_upload_resume_no_client(client, app):
     app.state._anthropic_client = None
     app.state.testing = True

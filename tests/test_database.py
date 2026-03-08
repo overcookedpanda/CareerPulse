@@ -128,6 +128,22 @@ async def test_get_unscored_jobs(db):
 
 
 @pytest.mark.asyncio
+async def test_add_and_get_events(db):
+    job_id = await db.insert_job(
+        title="Dev", company="Co", location="Remote",
+        salary_min=None, salary_max=None, description="desc",
+        url="http://x", posted_date=None,
+        application_method="url", contact_email=None,
+    )
+    await db.add_event(job_id, "note", "Looks interesting")
+    await db.add_event(job_id, "status_change", "interested -> prepared")
+    events = await db.get_events(job_id)
+    assert len(events) == 2
+    assert events[0]["event_type"] == "status_change"  # DESC order
+    assert events[1]["event_type"] == "note"
+
+
+@pytest.mark.asyncio
 async def test_dismiss_job(db):
     job_id = await db.insert_job(
         title="Dismiss me", company="Co", location="Remote",

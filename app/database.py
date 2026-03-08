@@ -92,9 +92,18 @@ class Database:
                 base_url TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS app_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                detail TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (job_id) REFERENCES jobs(id)
+            );
             CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs(dedup_hash);
             CREATE INDEX IF NOT EXISTS idx_scores_job ON job_scores(job_id);
             CREATE INDEX IF NOT EXISTS idx_sources_job ON sources(job_id);
+            CREATE INDEX IF NOT EXISTS idx_events_job ON app_events(job_id);
         """)
         await self._migrate()
         await self.db.commit()
@@ -347,11 +356,27 @@ class Database:
         )
         await self.db.commit()
 
+    async def add_event(self, job_id: int, event_type: str, detail: str = ""):
+        now = datetime.now(timezone.utc).isoformat()
+        await self.db.execute(
+            "INSERT INTO app_events (job_id, event_type, detail, created_at) VALUES (?, ?, ?, ?)",
+            (job_id, event_type, detail, now)
+        )
+        await self.db.commit()
+
+    async def get_events(self, job_id: int) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM app_events WHERE job_id = ? ORDER BY created_at DESC", (job_id,)
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
     async def clear_jobs(self):
         await self.db.executescript("""
             DELETE FROM sources;
             DELETE FROM job_scores;
             DELETE FROM applications;
+            DELETE FROM app_events;
             DELETE FROM jobs;
         """)
         await self.db.commit()
@@ -361,6 +386,7 @@ class Database:
             DELETE FROM sources;
             DELETE FROM job_scores;
             DELETE FROM applications;
+            DELETE FROM app_events;
             DELETE FROM jobs;
             DELETE FROM search_config;
             DELETE FROM ai_settings;

@@ -176,7 +176,8 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
         score = await app.state.db.get_score(job_id)
         sources = await app.state.db.get_sources(job_id)
         application = await app.state.db.get_application(job_id)
-        return {**job, "score": score, "sources": sources, "application": application}
+        events = await app.state.db.get_events(job_id)
+        return {**job, "score": score, "sources": sources, "application": application, "events": events}
 
     @app.post("/api/jobs/{job_id}/dismiss")
     async def dismiss_job(job_id: int):
@@ -216,6 +217,8 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             cover_letter=result.get("cover_letter", ""),
         )
 
+        await app.state.db.add_event(job_id, "prepared", "Application prepared")
+
         return {
             "job_id": job_id,
             "status": "prepared",
@@ -233,6 +236,7 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
         if not application or not application.get("tailored_resume"):
             raise HTTPException(404, "No tailored resume prepared for this job")
         pdf_bytes = generate_resume_pdf(application["tailored_resume"])
+        await app.state.db.add_event(job_id, "pdf_downloaded", "Resume PDF downloaded")
         filename = f"Resume - {job['company']} - {job['title']}.pdf".replace("/", "-")
         return Response(
             content=pdf_bytes,
@@ -254,6 +258,7 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             company=job.get("company", ""),
             position=job.get("title", ""),
         )
+        await app.state.db.add_event(job_id, "pdf_downloaded", "Cover letter PDF downloaded")
         filename = f"Cover Letter - {job['company']} - {job['title']}.pdf".replace("/", "-")
         return Response(
             content=pdf_bytes,
@@ -292,7 +297,18 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
                 email_draft=json.dumps(email),
             )
 
+        await app.state.db.add_event(job_id, "email_drafted", "Email drafted")
+
         return {"job_id": job_id, "email": email}
+
+    @app.post("/api/jobs/{job_id}/events")
+    async def add_event(job_id: int, request: Request):
+        body = await request.json()
+        detail = body.get("detail", "")
+        if not detail.strip():
+            raise HTTPException(400, "Detail is required")
+        await app.state.db.add_event(job_id, "note", detail)
+        return {"ok": True}
 
     @app.post("/api/jobs/{job_id}/application")
     async def update_application(job_id: int, status: str = Query(...), notes: str = Query("")):
@@ -301,6 +317,7 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             await app.state.db.insert_application(job_id, status)
         else:
             await app.state.db.update_application(app_row["id"], status=status, notes=notes)
+        await app.state.db.add_event(job_id, "status_change", f"Status changed to {status}")
         return {"ok": True}
 
     @app.get("/api/stats")

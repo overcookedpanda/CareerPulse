@@ -51,6 +51,10 @@ const api = {
         return this.request('POST', `/api/jobs/${id}/email`);
     },
 
+    addEvent(id, detail) {
+        return this.request('POST', `/api/jobs/${id}/events`, { detail });
+    },
+
     getSearchConfig() {
         return this.request('GET', '/api/search-config');
     },
@@ -460,11 +464,17 @@ function renderJobDetailContent(container, job) {
                         </select>
                     </div>
                     <div class="mt-16">
-                        <label class="mb-8" style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary)">Notes</label>
-                        <textarea class="textarea-styled textarea-notes" id="notes-textarea" placeholder="Add notes...">${escapeHtml(application?.notes || '')}</textarea>
+                        <button class="btn btn-secondary btn-sm" id="save-status-btn">Save Status</button>
                     </div>
-                    <div class="mt-16">
-                        <button class="btn btn-secondary btn-sm" id="save-status-btn">Save Status & Notes</button>
+                </div>
+                <div class="card sidebar-section">
+                    <h3>Timeline</h3>
+                    <div class="flex gap-8 mb-16">
+                        <input type="text" class="search-input" id="add-note-input" placeholder="Add a note..." style="flex:1">
+                        <button class="btn btn-primary btn-sm" id="add-note-btn">Add</button>
+                    </div>
+                    <div class="timeline" id="timeline-container">
+                        ${renderTimeline(job.events || [])}
                     </div>
                 </div>
                 <div id="prepared-container">
@@ -502,13 +512,31 @@ function renderJobDetailContent(container, job) {
 
     document.getElementById('save-status-btn').addEventListener('click', async () => {
         const status = document.getElementById('status-select').value;
-        const notes = document.getElementById('notes-textarea').value;
         try {
-            await api.updateApplication(job.id, status, notes);
+            await api.updateApplication(job.id, status);
             showToast('Status updated', 'success');
         } catch (err) {
             showToast(err.message, 'error');
         }
+    });
+
+    const addNoteBtn = document.getElementById('add-note-btn');
+    const addNoteInput = document.getElementById('add-note-input');
+    addNoteBtn.addEventListener('click', async () => {
+        const detail = addNoteInput.value.trim();
+        if (!detail) return;
+        try {
+            await api.addEvent(job.id, detail);
+            addNoteInput.value = '';
+            const updated = await api.getJob(job.id);
+            document.getElementById('timeline-container').innerHTML = renderTimeline(updated.events || []);
+            showToast('Note added', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+    addNoteInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') addNoteBtn.click();
     });
 
     const emailBtn = document.getElementById('email-btn');
@@ -530,6 +558,28 @@ function renderJobDetailContent(container, job) {
     }
 
     attachPreparedListeners();
+}
+
+function renderTimeline(events) {
+    if (!events || events.length === 0) {
+        return '<div style="font-size:0.8125rem;color:var(--text-tertiary)">No events yet.</div>';
+    }
+    const icons = {
+        note: '\u{1F4DD}',
+        status_change: '\u{1F504}',
+        prepared: '\u{1F4C4}',
+        email_drafted: '\u2709\uFE0F',
+        pdf_downloaded: '\u2B07\uFE0F',
+    };
+    return events.map(e => `
+        <div class="timeline-event">
+            <span class="timeline-icon">${icons[e.event_type] || '\u{1F4DD}'}</span>
+            <div>
+                <div class="timeline-detail">${escapeHtml(e.detail)}</div>
+                <div class="timeline-time">${formatDate(e.created_at)}</div>
+            </div>
+        </div>
+    `).join('');
 }
 
 function renderPreparedSection(data, jobId) {
@@ -608,7 +658,10 @@ async function renderStats(container) {
         container.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
                 <h1 style="font-size:1.5rem;font-weight:700;letter-spacing:-0.02em">Dashboard</h1>
-                <button class="btn btn-primary" id="stats-scrape-btn">Scrape Now</button>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary" id="stats-scrape-btn">Scrape Now</button>
+                    <button class="btn btn-secondary" id="stats-score-btn">${stats.total_jobs - stats.total_scored > 0 ? `Score ${stats.total_jobs - stats.total_scored} Unscored` : 'All Scored'}</button>
+                </div>
             </div>
             <div class="stats-grid">
                 <div class="card stat-card">
@@ -652,6 +705,17 @@ async function renderStats(container) {
         `;
 
         document.getElementById('stats-scrape-btn').addEventListener('click', handleScrape);
+        const scoreBtn = document.getElementById('stats-score-btn');
+        scoreBtn.addEventListener('click', async () => {
+            scoreBtn.disabled = true;
+            scoreBtn.innerHTML = '<span class="spinner"></span> Scoring...';
+            try {
+                await api.request('POST', '/api/score');
+                showToast('Scoring started in background', 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
     } catch (err) {
         showToast(err.message, 'error');
         container.innerHTML = `
