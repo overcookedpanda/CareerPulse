@@ -115,6 +115,17 @@ class Database:
                 updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_events_job ON app_events(job_id);
+            CREATE TABLE IF NOT EXISTS companies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                normalized_name TEXT UNIQUE NOT NULL,
+                website TEXT,
+                description TEXT,
+                size TEXT,
+                industry TEXT,
+                glassdoor_rating REAL,
+                updated_at TEXT NOT NULL
+            );
         """)
         await self._migrate()
         await self.db.commit()
@@ -443,6 +454,31 @@ class Database:
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
+    async def get_company(self, name: str) -> dict | None:
+        normalized = name.lower().strip()
+        cursor = await self.db.execute(
+            "SELECT * FROM companies WHERE normalized_name = ?", (normalized,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def save_company(self, name: str, **fields):
+        now = datetime.now(timezone.utc).isoformat()
+        normalized = name.lower().strip()
+        existing = await self.get_company(name)
+        if existing:
+            sets = ", ".join(f"{k} = ?" for k in fields)
+            vals = list(fields.values()) + [now, normalized]
+            await self.db.execute(
+                f"UPDATE companies SET {sets}, updated_at = ? WHERE normalized_name = ?", vals)
+        else:
+            cols = ["name", "normalized_name", "updated_at"] + list(fields.keys())
+            vals = [name, normalized, now] + list(fields.values())
+            placeholders = ", ".join("?" for _ in cols)
+            col_str = ", ".join(cols)
+            await self.db.execute(
+                f"INSERT INTO companies ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+
     async def clear_jobs(self):
         await self.db.executescript("""
             DELETE FROM sources;
@@ -483,6 +519,7 @@ class Database:
             DELETE FROM search_config;
             DELETE FROM ai_settings;
             DELETE FROM user_profile;
+            DELETE FROM companies;
         """)
         await self.db.commit()
 

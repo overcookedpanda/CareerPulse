@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(ssh:*)",
+      "Bash(rsync:*)",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(git:*)",
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(/Library/Frameworks/Python.framework/Versions/3.11/bin/pytest:*)",
+      "Bash(source:*)"
+    ]
+  }
+}

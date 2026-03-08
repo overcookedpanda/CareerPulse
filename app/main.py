@@ -669,6 +669,30 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             "resume_length": len(resume_text),
         }
 
+    @app.get("/api/companies/{company_name:path}")
+    async def get_company_info(company_name: str):
+        from app.company_research import research_company
+        # Check cache first
+        cached = await app.state.db.get_company(company_name)
+        if cached:
+            return cached
+        # Fetch and cache
+        info = await research_company(company_name)
+        fields = {}
+        if info.get("description"):
+            fields["description"] = info["description"]
+        if info.get("website"):
+            fields["website"] = info["website"]
+        if info.get("glassdoor_rating"):
+            fields["glassdoor_rating"] = info["glassdoor_rating"]
+        if info.get("size"):
+            fields["size"] = info["size"]
+        if info.get("industry"):
+            fields["industry"] = info["industry"]
+        if fields:
+            await app.state.db.save_company(company_name, **fields)
+        return await app.state.db.get_company(company_name) or info
+
     if not testing:
         static_dir = os.path.join(os.path.dirname(__file__), "static")
         if os.path.exists(static_dir):

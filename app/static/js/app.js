@@ -414,7 +414,13 @@ async function renderJobDetail(container, jobId) {
             api.getJob(jobId),
             api.request('GET', '/api/profile'),
         ]);
-        renderJobDetailContent(container, job, profile);
+        let companyInfo = null;
+        try {
+            companyInfo = await api.request('GET', `/api/companies/${encodeURIComponent(job.company)}`);
+        } catch (e) {
+            // silently ignore
+        }
+        renderJobDetailContent(container, job, profile, companyInfo);
     } catch (err) {
         showToast(err.message, 'error');
         container.innerHTML = `
@@ -426,7 +432,7 @@ async function renderJobDetail(container, jobId) {
     }
 }
 
-function renderJobDetailContent(container, job, profile = {}) {
+function renderJobDetailContent(container, job, profile = {}, companyInfo = null) {
     const score = job.score;
     const matchScore = score?.match_score;
     const scoreClass = getScoreClass(matchScore);
@@ -605,6 +611,20 @@ function renderJobDetailContent(container, job, profile = {}) {
                         `).join('')}
                     </div>
                     <button class="btn btn-secondary btn-sm" id="dismiss-dupes-btn" style="margin-top:12px;width:100%">Dismiss Duplicates</button>
+                </div>
+                ` : ''}
+                ${companyInfo && (companyInfo.description || companyInfo.glassdoor_rating) ? `
+                <div class="card sidebar-section">
+                    <h3>About ${escapeHtml(job.company)}</h3>
+                    ${companyInfo.description ? `<p style="font-size:0.8125rem;color:var(--text-secondary);line-height:1.5;margin-bottom:8px">${escapeHtml(companyInfo.description.substring(0, 200))}${companyInfo.description.length > 200 ? '...' : ''}</p>` : ''}
+                    ${companyInfo.glassdoor_rating ? `
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                            <span style="font-weight:600;font-size:0.875rem">${companyInfo.glassdoor_rating}</span>
+                            <span style="color:#f59e0b">★</span>
+                            <span style="font-size:0.75rem;color:var(--text-tertiary)">Glassdoor</span>
+                        </div>
+                    ` : ''}
+                    ${companyInfo.website ? `<a href="${escapeHtml(companyInfo.website)}" target="_blank" style="font-size:0.8125rem;color:var(--accent)">Company Website →</a>` : ''}
                 </div>
                 ` : ''}
                 <div id="prepared-container">
