@@ -267,6 +267,18 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
     async def get_stats():
         return await app.state.db.get_stats()
 
+    @app.post("/api/clear-jobs")
+    async def clear_jobs():
+        await app.state.db.clear_jobs()
+        return {"ok": True, "message": "All jobs, scores, and applications cleared"}
+
+    @app.post("/api/clear-all")
+    async def clear_all():
+        await app.state.db.clear_all()
+        app.state.matcher = None
+        app.state.tailor = None
+        return {"ok": True, "message": "All data cleared"}
+
     @app.post("/api/scrape")
     async def trigger_scrape():
         async def _scrape_and_score():

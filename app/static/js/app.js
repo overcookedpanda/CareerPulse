@@ -833,7 +833,27 @@ function renderSettingsContent(container, config, aiSettings = {}) {
             </div>
         </div>
 
-        ${config.updated_at ? `<p style="color:var(--text-tertiary);font-size:0.8125rem">Last updated: ${formatDate(config.updated_at)}</p>` : ''}
+        ${config.updated_at ? `<p style="color:var(--text-tertiary);font-size:0.8125rem;margin-bottom:24px">Last updated: ${formatDate(config.updated_at)}</p>` : ''}
+
+        <div class="card" style="padding:24px;margin-bottom:24px;border-left:4px solid var(--danger, #ef4444)">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px;color:var(--danger, #ef4444)">Danger Zone</h2>
+            <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+                    <div>
+                        <div style="font-weight:600;font-size:0.9375rem">Clear Jobs & Scores</div>
+                        <div style="color:var(--text-secondary);font-size:0.8125rem">Remove all scraped jobs, scores, and application data. Keeps your resume, search terms, and AI settings.</div>
+                    </div>
+                    <button class="btn btn-danger" id="clear-jobs-btn" style="white-space:nowrap">Clear Jobs</button>
+                </div>
+                <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+                    <div>
+                        <div style="font-weight:600;font-size:0.9375rem">Reset Everything</div>
+                        <div style="color:var(--text-secondary);font-size:0.8125rem">Remove all data including resume, search terms, AI settings, jobs, and scores. Returns to a fresh state.</div>
+                    </div>
+                    <button class="btn btn-danger" id="clear-all-btn" style="white-space:nowrap">Reset All</button>
+                </div>
+            </div>
+        </div>
     `;
 
     document.getElementById('upload-resume-btn').addEventListener('click', async () => {
@@ -968,6 +988,33 @@ function renderSettingsContent(container, config, aiSettings = {}) {
         } finally {
             btn.disabled = false;
             btn.textContent = 'Test Connection';
+        }
+    });
+
+    // Clear jobs
+    document.getElementById('clear-jobs-btn').addEventListener('click', async () => {
+        if (!confirm('This will permanently delete all jobs, scores, and applications. Continue?')) return;
+        try {
+            await api.request('POST', '/api/clear-jobs');
+            showToast('All jobs cleared', 'info');
+            const [updatedConfig, updatedAI] = await Promise.all([api.getSearchConfig(), api.getAISettings()]);
+            renderSettingsContent(container, updatedConfig, updatedAI);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    // Reset everything
+    document.getElementById('clear-all-btn').addEventListener('click', async () => {
+        if (!confirm('This will permanently delete ALL data including your resume, search terms, and AI settings. Continue?')) return;
+        if (!confirm('Are you sure? This cannot be undone.')) return;
+        try {
+            await api.request('POST', '/api/clear-all');
+            showToast('All data reset', 'info');
+            const [updatedConfig, updatedAI] = await Promise.all([api.getSearchConfig(), api.getAISettings()]);
+            renderSettingsContent(container, updatedConfig, updatedAI);
+        } catch (err) {
+            showToast(err.message, 'error');
         }
     });
 }

@@ -331,6 +331,26 @@ class Database:
         )
         await self.db.commit()
 
+    async def clear_jobs(self):
+        await self.db.executescript("""
+            DELETE FROM sources;
+            DELETE FROM job_scores;
+            DELETE FROM applications;
+            DELETE FROM jobs;
+        """)
+        await self.db.commit()
+
+    async def clear_all(self):
+        await self.db.executescript("""
+            DELETE FROM sources;
+            DELETE FROM job_scores;
+            DELETE FROM applications;
+            DELETE FROM jobs;
+            DELETE FROM search_config;
+            DELETE FROM ai_settings;
+        """)
+        await self.db.commit()
+
     async def get_stats(self):
         stats = {}
         for key, query in [

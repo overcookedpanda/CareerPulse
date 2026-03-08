@@ -11,6 +11,8 @@ Self-hosted job discovery and application tool. Scrapes jobs from multiple board
 - **Configurable AI backend** — Anthropic (Claude) or Ollama (local models)
 - **Job filters** — Score threshold, work type (remote/onsite/hybrid), employment type, location, keyword search
 - **Automated scheduling** — Periodic scraping with APScheduler
+- **Persistent data** — SQLite database survives restarts via Docker volume mount
+- **Data management** — Clear jobs or reset all data from Settings
 
 ## Quick Start
 
@@ -122,6 +124,8 @@ SQLite with tables: `jobs`, `sources`, `job_scores`, `applications`, `search_con
 - `GET /api/stats` — Job counts by status
 - `POST /api/scrape` — Trigger scrape cycle (background)
 - `POST /api/score` — Trigger scoring (background)
+- `POST /api/clear-jobs` — Delete all jobs, scores, and applications (keeps config)
+- `POST /api/clear-all` — Factory reset (deletes everything)
 - `GET /api/health` — Health check
 
 ## Testing
