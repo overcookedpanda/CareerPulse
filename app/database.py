@@ -146,6 +146,7 @@ class Database:
             "hiring_manager_email": "ALTER TABLE jobs ADD COLUMN hiring_manager_email TEXT",
             "hiring_manager_title": "ALTER TABLE jobs ADD COLUMN hiring_manager_title TEXT",
             "contact_lookup_done": "ALTER TABLE jobs ADD COLUMN contact_lookup_done INTEGER DEFAULT 0",
+            "apply_url": "ALTER TABLE jobs ADD COLUMN apply_url TEXT",
         }
         for col, sql in jobs_migrations.items():
             if col not in jobs_columns:

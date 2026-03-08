@@ -227,6 +227,17 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             "cover_letter": result.get("cover_letter", ""),
         }
 
+    @app.post("/api/jobs/{job_id}/find-apply-link")
+    async def find_apply_link(job_id: int):
+        from app.apply_link_finder import find_apply_url
+        job = await app.state.db.get_job(job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        url = await find_apply_url(job["url"])
+        if url:
+            await app.state.db.update_job_contact(job_id, apply_url=url)
+        return {"ok": True, "apply_url": url}
+
     @app.post("/api/jobs/{job_id}/find-contact")
     async def find_contact(job_id: int):
         from app.contact_finder import find_hiring_contact

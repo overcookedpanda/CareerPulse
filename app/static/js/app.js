@@ -476,6 +476,10 @@ function renderJobDetailContent(container, job, profile = {}) {
                         <button class="btn btn-primary" id="prepare-btn">
                             Prepare Application
                         </button>
+                        ${job.apply_url
+                            ? `<a href="${escapeHtml(job.apply_url)}" target="_blank" class="btn btn-success" style="width:100%;text-align:center;background:#22c55e;color:white;text-decoration:none">Apply Now →</a>`
+                            : `<button class="btn btn-secondary btn-sm" id="find-apply-btn" style="width:100%">Find Apply Link</button>`
+                        }
                         <a href="${escapeHtml(job.url)}" target="_blank" class="btn btn-secondary">
                             Open Job Listing
                         </a>
@@ -609,6 +613,30 @@ function renderJobDetailContent(container, job, profile = {}) {
             btn.textContent = 'Prepare Application';
         }
     });
+
+    const findApplyBtn = document.getElementById('find-apply-btn');
+    if (findApplyBtn) {
+        findApplyBtn.addEventListener('click', async () => {
+            findApplyBtn.disabled = true;
+            findApplyBtn.innerHTML = '<span class="spinner"></span> Searching...';
+            try {
+                const result = await api.request('POST', `/api/jobs/${job.id}/find-apply-link`);
+                if (result.apply_url) {
+                    showToast('Apply link found!', 'success');
+                    const updated = await api.getJob(job.id);
+                    renderJobDetailContent(container, updated);
+                } else {
+                    showToast('No apply link found on the page', 'info');
+                    findApplyBtn.disabled = false;
+                    findApplyBtn.textContent = 'Find Apply Link';
+                }
+            } catch (err) {
+                showToast(err.message, 'error');
+                findApplyBtn.disabled = false;
+                findApplyBtn.textContent = 'Find Apply Link';
+            }
+        });
+    }
 
     document.getElementById('save-status-btn').addEventListener('click', async () => {
         const status = document.getElementById('status-select').value;
