@@ -159,6 +159,18 @@ function isNew(createdAt) {
     return new Date(createdAt) > new Date(lastVisit);
 }
 
+function getFreshness(job) {
+    const date = job.posted_date || job.created_at;
+    if (!date) return null;
+    const days = Math.floor((Date.now() - new Date(date)) / 86400000);
+    if (days <= 1) return { label: "Fresh", class: "freshness-hot", days };
+    if (days <= 3) return { label: "New", class: "freshness-new", days };
+    if (days <= 7) return { label: `${days}d ago`, class: "freshness-recent", days };
+    if (days <= 14) return { label: `${days}d ago`, class: "freshness-aging", days };
+    if (days <= 30) return { label: `${days}d ago`, class: "freshness-old", days };
+    return { label: "Stale", class: "freshness-stale", days };
+}
+
 // === State ===
 let currentJobs = [];
 let currentOffset = 0;
@@ -223,6 +235,7 @@ async function renderFeed(container) {
             <select class="filter-select" id="filter-sort">
                 <option value="score">Sort by score</option>
                 <option value="date">Sort by date</option>
+                <option value="freshest">Freshest</option>
             </select>
             <select class="filter-select" id="filter-work-type">
                 <option value="">All work types</option>
@@ -338,6 +351,8 @@ function createJobCard(job) {
     const scoreClass = getScoreClass(score);
     const newTag = isNew(job.created_at) ? `<span class="new-indicator">New</span>` : '';
     const statusTag = job.app_status ? `<span class="status-badge status-${job.app_status}">${job.app_status}</span>` : '';
+    const freshness = getFreshness(job);
+    const freshnessHtml = freshness ? `<span class="freshness-badge ${freshness.class}">${freshness.label}</span>` : '';
 
     card.innerHTML = `
         <div class="job-card-content">
@@ -351,6 +366,7 @@ function createJobCard(job) {
                 ${job.location ? `<span>${escapeHtml(job.location)}</span>` : ''}
                 ${salary ? `<span>${salary}</span>` : ''}
                 <span>${formatDate(job.created_at)}</span>
+                ${freshnessHtml}
             </div>
         </div>
         <div class="job-card-actions">
@@ -413,6 +429,10 @@ function renderJobDetailContent(container, job, profile = {}) {
     const reasonsHtml = (score?.match_reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
     const concernsHtml = (score?.concerns || []).map(c => `<li>${escapeHtml(c)}</li>`).join('');
 
+    const freshness = getFreshness(job);
+    const freshnessHtml = freshness ? `<span class="freshness-badge ${freshness.class}">${freshness.label}</span>` : '';
+    const staleWarning = freshness && freshness.class === 'freshness-stale' ? '<span style="font-size:0.8125rem;color:#ef4444;">This listing may be expired.</span>' : '';
+
     const descriptionContent = job.description
         ? (job.description.includes('<') && job.description.includes('>') ? job.description : `<p>${escapeHtml(job.description).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`)
         : '<p class="text-tertiary">No description available.</p>';
@@ -428,6 +448,8 @@ function renderJobDetailContent(container, job, profile = {}) {
                 ${job.location ? `<span>${escapeHtml(job.location)}</span>` : ''}
                 ${salary ? `<span>${salary}</span>` : ''}
                 <span>${formatDate(job.posted_date || job.created_at)}</span>
+                ${freshnessHtml}
+                ${staleWarning}
                 ${sources.map(s => `<a href="${escapeHtml(s.source_url || job.url)}" target="_blank" class="source-tag">${escapeHtml(s.source_name)}</a>`).join('')}
             </div>
         </div>

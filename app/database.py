@@ -276,6 +276,8 @@ class Database:
                 params.extend([f"%{term.lower()}%", f"%{term.lower()}%"])
         if sort_by == "score":
             query += " ORDER BY js.match_score DESC NULLS LAST"
+        elif sort_by == "freshest":
+            query += " ORDER BY COALESCE(j.posted_date, j.created_at) DESC"
         else:
             query += " ORDER BY j.created_at DESC"
         query += " LIMIT ? OFFSET ?"
