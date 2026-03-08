@@ -222,6 +222,7 @@ async function handleRoute() {
 
 // === Feed View ===
 async function renderFeed(container) {
+    focusedJobIndex = -1;
     currentOffset = 0;
     container.innerHTML = `
         <div class="filter-bar">
@@ -1280,6 +1281,103 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('jf_theme', next);
+}
+
+// === Keyboard Shortcuts ===
+let focusedJobIndex = -1;
+
+const SHORTCUTS = {
+    'j': { desc: 'Next job', action: () => navigateJob(1) },
+    'k': { desc: 'Previous job', action: () => navigateJob(-1) },
+    'o': { desc: 'Open job listing', action: openCurrentJob },
+    'd': { desc: 'Dismiss job', action: dismissCurrentJob },
+    'p': { desc: 'Prepare application', action: prepareCurrentJob },
+    's': { desc: 'Scrape now', action: handleScrape },
+    '/': { desc: 'Focus search', action: focusSearch },
+    '?': { desc: 'Show shortcuts', action: toggleShortcutsHelp },
+    'Escape': { desc: 'Close / Go back', action: goBack },
+};
+
+document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+    if (e.key === 'Enter' && focusedJobIndex >= 0) {
+        const cards = document.querySelectorAll('.job-card');
+        if (cards[focusedJobIndex]) cards[focusedJobIndex].click();
+        return;
+    }
+
+    const key = e.key;
+    const shortcut = SHORTCUTS[key];
+    if (shortcut) {
+        e.preventDefault();
+        shortcut.action();
+    }
+});
+
+function navigateJob(delta) {
+    const cards = document.querySelectorAll('.job-card');
+    if (!cards.length) return;
+    cards.forEach(c => c.classList.remove('job-card-focused'));
+    focusedJobIndex = Math.max(0, Math.min(cards.length - 1, focusedJobIndex + delta));
+    const card = cards[focusedJobIndex];
+    card.classList.add('job-card-focused');
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function openCurrentJob() {
+    const openLink = document.querySelector('a[target="_blank"][href^="http"]');
+    if (openLink) window.open(openLink.href, '_blank');
+}
+
+function dismissCurrentJob() {
+    const cards = document.querySelectorAll('.job-card');
+    if (focusedJobIndex >= 0 && focusedJobIndex < cards.length) {
+        const dismissBtn = cards[focusedJobIndex].querySelector('.dismiss-btn');
+        if (dismissBtn) dismissBtn.click();
+    }
+}
+
+function prepareCurrentJob() {
+    const prepareBtn = document.getElementById('prepare-btn');
+    if (prepareBtn && !prepareBtn.disabled) prepareBtn.click();
+}
+
+function focusSearch() {
+    const searchInput = document.querySelector('.search-input');
+    if (searchInput) searchInput.focus();
+}
+
+function goBack() {
+    const modal = document.getElementById('shortcuts-modal');
+    if (modal) { modal.remove(); return; }
+    if (window.location.hash.startsWith('#/job/')) {
+        window.location.hash = '#/';
+    }
+}
+
+function toggleShortcutsHelp() {
+    let modal = document.getElementById('shortcuts-modal');
+    if (modal) { modal.remove(); return; }
+    modal = document.createElement('div');
+    modal.id = 'shortcuts-modal';
+    modal.innerHTML = `
+        <div class="modal-overlay" onclick="document.getElementById('shortcuts-modal').remove()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <h2 style="font-size:1.125rem;font-weight:700;margin:0">Keyboard Shortcuts</h2>
+                    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('shortcuts-modal').remove()">Close</button>
+                </div>
+                <div class="shortcuts-grid">
+                    ${Object.entries(SHORTCUTS).map(([key, {desc}]) =>
+                        `<div class="shortcut-key"><kbd>${key === ' ' ? 'Space' : key}</kbd></div><div class="shortcut-desc">${desc}</div>`
+                    ).join('')}
+                    <div class="shortcut-key"><kbd>Enter</kbd></div><div class="shortcut-desc">Open focused job</div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 }
 
 // === Init ===
