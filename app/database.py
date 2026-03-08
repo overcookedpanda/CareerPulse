@@ -138,6 +138,19 @@ class Database:
             if col not in columns:
                 await self.db.execute(sql)
 
+        # Jobs table migrations
+        jobs_cursor = await self.db.execute("PRAGMA table_info(jobs)")
+        jobs_columns = {row[1] for row in await jobs_cursor.fetchall()}
+        jobs_migrations = {
+            "hiring_manager_name": "ALTER TABLE jobs ADD COLUMN hiring_manager_name TEXT",
+            "hiring_manager_email": "ALTER TABLE jobs ADD COLUMN hiring_manager_email TEXT",
+            "hiring_manager_title": "ALTER TABLE jobs ADD COLUMN hiring_manager_title TEXT",
+            "contact_lookup_done": "ALTER TABLE jobs ADD COLUMN contact_lookup_done INTEGER DEFAULT 0",
+        }
+        for col, sql in jobs_migrations.items():
+            if col not in jobs_columns:
+                await self.db.execute(sql)
+
         # One-time migration: move notes from applications to app_events
         cursor = await self.db.execute(
             "SELECT job_id, notes FROM applications WHERE notes IS NOT NULL AND notes != ''"
@@ -385,6 +398,12 @@ class Database:
                updated_at = excluded.updated_at""",
             (provider, api_key, model, base_url, now)
         )
+        await self.db.commit()
+
+    async def update_job_contact(self, job_id: int, **fields):
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        vals = list(fields.values()) + [job_id]
+        await self.db.execute(f"UPDATE jobs SET {sets} WHERE id = ?", vals)
         await self.db.commit()
 
     async def add_event(self, job_id: int, event_type: str, detail: str = ""):

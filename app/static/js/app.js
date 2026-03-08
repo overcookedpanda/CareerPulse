@@ -479,7 +479,7 @@ function renderJobDetailContent(container, job, profile = {}) {
                         <a href="${escapeHtml(job.url)}" target="_blank" class="btn btn-secondary">
                             Open Job Listing
                         </a>
-                        ${job.contact_email ? `<button class="btn btn-secondary" id="email-btn">Draft Email</button>` : ''}
+                        ${(job.hiring_manager_email || job.contact_email) ? `<button class="btn btn-secondary" id="email-btn">Draft Email</button>` : ''}
                     </div>
                     <div class="mt-16">
                         <label class="mb-8" style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary)">Status</label>
@@ -493,6 +493,29 @@ function renderJobDetailContent(container, job, profile = {}) {
                         <button class="btn btn-secondary btn-sm" id="save-status-btn">Save Status</button>
                     </div>
                 </div>
+                ${(() => {
+                    const contactEmail = job.hiring_manager_email || job.contact_email || '';
+                    const contactName = job.hiring_manager_name || '';
+                    const lookupDone = job.contact_lookup_done;
+                    return `
+                    <div class="card sidebar-section">
+                        <h3>Contact Info</h3>
+                        ${contactEmail ? `
+                            <div style="display:flex;flex-direction:column;gap:6px">
+                                ${contactName ? `<div style="font-weight:600;font-size:0.875rem">${escapeHtml(contactName)}</div>` : ''}
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="font-size:0.875rem;color:var(--text-secondary)">${escapeHtml(contactEmail)}</span>
+                                    <button class="btn btn-ghost btn-sm copy-btn" data-copy="${escapeHtml(contactEmail)}" title="Copy email">&#128203;</button>
+                                </div>
+                            </div>
+                        ` : lookupDone ? `
+                            <div style="font-size:0.8125rem;color:var(--text-tertiary);margin-bottom:8px">No contact found</div>
+                            <button class="btn btn-secondary btn-sm" id="find-contact-btn">Retry Search</button>
+                        ` : `
+                            <button class="btn btn-secondary btn-sm" id="find-contact-btn">Find Contact</button>
+                        `}
+                    </div>`;
+                })()}
                 ${(() => {
                     const profileFields = [
                         {label: 'Name', key: 'full_name'},
@@ -630,6 +653,35 @@ function renderJobDetailContent(container, job, profile = {}) {
             } finally {
                 emailBtn.disabled = false;
                 emailBtn.textContent = 'Draft Email';
+            }
+        });
+    }
+
+    document.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            copyToClipboard(btn.dataset.copy);
+        });
+    });
+
+    const findContactBtn = document.getElementById('find-contact-btn');
+    if (findContactBtn) {
+        findContactBtn.addEventListener('click', async () => {
+            findContactBtn.disabled = true;
+            findContactBtn.innerHTML = '<span class="spinner"></span> Searching...';
+            try {
+                const result = await api.request('POST', `/api/jobs/${job.id}/find-contact`);
+                if (result.contact && result.contact.email) {
+                    showToast(`Found: ${result.contact.email}`, 'success');
+                } else {
+                    showToast('No contact found', 'info');
+                }
+                // Refresh the job detail
+                const updated = await api.getJob(job.id);
+                renderJobDetailContent(container, updated, profile);
+            } catch (err) {
+                showToast(err.message, 'error');
+                findContactBtn.disabled = false;
+                findContactBtn.textContent = 'Find Contact';
             }
         });
     }

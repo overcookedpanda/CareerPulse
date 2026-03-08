@@ -227,6 +227,32 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             "cover_letter": result.get("cover_letter", ""),
         }
 
+    @app.post("/api/jobs/{job_id}/find-contact")
+    async def find_contact(job_id: int):
+        from app.contact_finder import find_hiring_contact
+        job = await app.state.db.get_job(job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+
+        result = await find_hiring_contact(
+            job["company"], job["title"], job.get("location", "")
+        )
+
+        update = {"contact_lookup_done": 1}
+        if result.get("email"):
+            update["hiring_manager_email"] = result["email"]
+        if result.get("name"):
+            update["hiring_manager_name"] = result["name"]
+        if result.get("title"):
+            update["hiring_manager_title"] = result["title"]
+
+        await app.state.db.update_job_contact(job_id, **update)
+
+        await app.state.db.add_event(job_id, "note",
+            f"Contact lookup: {'Found ' + result['email'] if result.get('email') else 'No contact found'}")
+
+        return {"ok": True, "contact": result}
+
     @app.get("/api/jobs/{job_id}/resume.pdf")
     async def download_resume_pdf(job_id: int):
         from app.pdf_generator import generate_resume_pdf
@@ -281,7 +307,7 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             raise HTTPException(400, "No cover letter prepared for this job")
 
         email = draft_application_email(
-            to=job.get("contact_email"),
+            to=job.get("hiring_manager_email") or job.get("contact_email"),
             company=job["company"],
             position=job["title"],
             cover_letter=cover_letter,
