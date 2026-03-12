@@ -476,6 +476,7 @@ a:hover {
     gap: 16px;
     padding: 16px 20px;
     cursor: pointer;
+    position: relative;
 }
 
 .job-card-content {

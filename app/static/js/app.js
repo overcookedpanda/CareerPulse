@@ -175,6 +175,8 @@ function getFreshness(job) {
 let currentJobs = [];
 let currentOffset = 0;
 const PAGE_SIZE = 50;
+let selectedJobIds = new Set();
+let selectMode = false;
 
 // === Router ===
 function getRoute() {
@@ -265,6 +267,14 @@ async function renderFeed(container) {
                 <option value="hide">Hide clearance/visa required</option>
                 <option value="only">Only clearance/visa required</option>
             </select>
+            <button class="btn btn-secondary btn-sm" id="select-mode-btn" style="white-space:nowrap">Select</button>
+        </div>
+        <div id="batch-bar" style="display:none;position:sticky;top:0;z-index:50;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:12px;display:none;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+            <span id="batch-count" style="font-weight:600;font-size:0.875rem">0 selected</span>
+            <button class="btn btn-primary btn-sm" id="batch-prepare-btn">Prepare Selected</button>
+            <button class="btn btn-secondary btn-sm" id="batch-dismiss-btn">Dismiss Selected</button>
+            <button class="btn btn-ghost btn-sm" id="batch-select-all-btn">Select All</button>
+            <button class="btn btn-ghost btn-sm" id="batch-clear-btn">Clear</button>
         </div>
         <div class="job-list" id="job-list"></div>
         <div id="load-more-container" style="padding:24px 0;text-align:center;display:none">
@@ -303,6 +313,36 @@ async function renderFeed(container) {
     regionSelect.addEventListener('change', reload);
     clearanceSelect.addEventListener('change', reload);
     loadMoreBtn.addEventListener('click', () => loadJobs(true));
+
+    // Select mode
+    const selectModeBtn = document.getElementById('select-mode-btn');
+    selectModeBtn.addEventListener('click', () => {
+        selectMode = !selectMode;
+        selectedJobIds.clear();
+        selectModeBtn.textContent = selectMode ? 'Cancel Select' : 'Select';
+        selectModeBtn.classList.toggle('btn-primary', selectMode);
+        selectModeBtn.classList.toggle('btn-secondary', !selectMode);
+        updateBatchBar();
+        document.querySelectorAll('.job-card-checkbox').forEach(cb => {
+            cb.style.display = selectMode ? '' : 'none';
+            cb.checked = false;
+        });
+    });
+
+    document.getElementById('batch-prepare-btn').addEventListener('click', batchPrepare);
+    document.getElementById('batch-dismiss-btn').addEventListener('click', batchDismiss);
+    document.getElementById('batch-select-all-btn').addEventListener('click', () => {
+        document.querySelectorAll('.job-card-checkbox').forEach(cb => {
+            cb.checked = true;
+            selectedJobIds.add(parseInt(cb.dataset.jobId));
+        });
+        updateBatchBar();
+    });
+    document.getElementById('batch-clear-btn').addEventListener('click', () => {
+        selectedJobIds.clear();
+        document.querySelectorAll('.job-card-checkbox').forEach(cb => cb.checked = false);
+        updateBatchBar();
+    });
 
     await loadJobs(false);
 
@@ -362,6 +402,60 @@ async function loadJobs(append) {
     }
 }
 
+function updateBatchBar() {
+    const bar = document.getElementById('batch-bar');
+    if (!bar) return;
+    const count = selectedJobIds.size;
+    bar.style.display = selectMode && count > 0 ? 'flex' : 'none';
+    const countEl = document.getElementById('batch-count');
+    if (countEl) countEl.textContent = `${count} selected`;
+}
+
+async function batchPrepare() {
+    const ids = [...selectedJobIds];
+    if (!ids.length) return;
+    const btn = document.getElementById('batch-prepare-btn');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Preparing 0/${ids.length}...`;
+    let done = 0;
+    let failed = 0;
+    for (const id of ids) {
+        try {
+            await api.prepareApplication(id);
+            done++;
+        } catch {
+            failed++;
+        }
+        btn.innerHTML = `<span class="spinner"></span> Preparing ${done + failed}/${ids.length}...`;
+    }
+    btn.disabled = false;
+    btn.textContent = 'Prepare Selected';
+    const msg = failed ? `Prepared ${done}/${ids.length} (${failed} failed)` : `Prepared ${done} applications`;
+    showToast(msg, failed ? 'error' : 'success');
+    selectedJobIds.clear();
+    selectMode = false;
+    const selectBtn = document.getElementById('select-mode-btn');
+    if (selectBtn) { selectBtn.textContent = 'Select'; selectBtn.classList.remove('btn-primary'); selectBtn.classList.add('btn-secondary'); }
+    updateBatchBar();
+    loadJobs(false);
+}
+
+async function batchDismiss() {
+    const ids = [...selectedJobIds];
+    if (!ids.length) return;
+    if (!confirm(`Dismiss ${ids.length} jobs?`)) return;
+    for (const id of ids) {
+        try { await api.dismissJob(id); } catch {}
+    }
+    showToast(`Dismissed ${ids.length} jobs`, 'info');
+    selectedJobIds.clear();
+    selectMode = false;
+    const selectBtn = document.getElementById('select-mode-btn');
+    if (selectBtn) { selectBtn.textContent = 'Select'; selectBtn.classList.remove('btn-primary'); selectBtn.classList.add('btn-secondary'); }
+    updateBatchBar();
+    loadJobs(false);
+}
+
 function createJobCard(job) {
     const card = document.createElement('div');
     card.className = 'card card-interactive job-card';
@@ -383,7 +477,8 @@ function createJobCard(job) {
     }
 
     card.innerHTML = `
-        <div class="job-card-content">
+        <input type="checkbox" class="job-card-checkbox" data-job-id="${job.id}" style="display:${selectMode ? '' : 'none'};position:absolute;top:12px;left:12px;width:18px;height:18px;z-index:2;cursor:pointer"${selectedJobIds.has(job.id) ? ' checked' : ''}>
+        <div class="job-card-content" style="${selectMode ? 'padding-left:28px' : ''}">
             <div class="job-card-header">
                 <span class="job-card-title text-truncate">${escapeHtml(job.title)}</span>
                 ${newTag}
@@ -405,8 +500,26 @@ function createJobCard(job) {
         </div>
     `;
 
+    const checkbox = card.querySelector('.job-card-checkbox');
+    checkbox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (checkbox.checked) {
+            selectedJobIds.add(job.id);
+        } else {
+            selectedJobIds.delete(job.id);
+        }
+        updateBatchBar();
+    });
+
     card.addEventListener('click', (e) => {
-        if (e.target.closest('.dismiss-btn')) return;
+        if (e.target.closest('.dismiss-btn') || e.target.closest('.job-card-checkbox')) return;
+        if (selectMode) {
+            checkbox.checked = !checkbox.checked;
+            if (checkbox.checked) selectedJobIds.add(job.id);
+            else selectedJobIds.delete(job.id);
+            updateBatchBar();
+            return;
+        }
         navigate(`#/job/${job.id}`);
     });
 
