@@ -14,8 +14,26 @@ def _resolve_ollama_url(url: str) -> str:
     return url
 
 
+OPENAI_COMPAT_PROVIDERS = {
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4o",
+    },
+    "google": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_model": "gemini-2.0-flash",
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "default_model": "anthropic/claude-sonnet-4",
+    },
+}
+
+ALL_PROVIDERS = ["anthropic", "ollama", "openai", "google", "openrouter"]
+
+
 class AIClient:
-    """Unified async AI client supporting Anthropic and Ollama backends."""
+    """Unified async AI client supporting Anthropic, Ollama, OpenAI, Google, and OpenRouter."""
 
     def __init__(self, provider: str, api_key: str = "", model: str = "",
                  base_url: str = ""):
@@ -29,11 +47,15 @@ class AIClient:
             return "claude-sonnet-4-20250514"
         if self.provider == "ollama":
             return "llama3"
+        if self.provider in OPENAI_COMPAT_PROVIDERS:
+            return OPENAI_COMPAT_PROVIDERS[self.provider]["default_model"]
         return ""
 
     def _default_base_url(self):
         if self.provider == "ollama":
             return "http://localhost:11434"
+        if self.provider in OPENAI_COMPAT_PROVIDERS:
+            return OPENAI_COMPAT_PROVIDERS[self.provider]["base_url"]
         return ""
 
     async def chat(self, prompt: str, max_tokens: int = 1024) -> str:
@@ -41,6 +63,8 @@ class AIClient:
             return await self._anthropic_chat(prompt, max_tokens)
         elif self.provider == "ollama":
             return await self._ollama_chat(prompt, max_tokens)
+        elif self.provider in OPENAI_COMPAT_PROVIDERS:
+            return await self._openai_chat(prompt, max_tokens)
         else:
             raise ValueError(f"Unknown provider: {self.provider}")
 
@@ -53,6 +77,16 @@ class AIClient:
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text
+
+    async def _openai_chat(self, prompt: str, max_tokens: int) -> str:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+        response = await client.chat.completions.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content
 
     async def _ollama_chat(self, prompt: str, max_tokens: int) -> str:
         url = f"{_resolve_ollama_url(self.base_url).rstrip('/')}/api/chat"

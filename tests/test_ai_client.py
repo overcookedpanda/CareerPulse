@@ -17,6 +17,23 @@ def test_default_base_url_ollama():
     assert client.base_url == "http://localhost:11434"
 
 
+def test_default_model_openai():
+    client = AIClient("openai", api_key="test")
+    assert client.model == "gpt-4o"
+    assert client.base_url == "https://api.openai.com/v1"
+
+
+def test_default_model_google():
+    client = AIClient("google", api_key="test")
+    assert client.model == "gemini-2.0-flash"
+
+
+def test_default_model_openrouter():
+    client = AIClient("openrouter", api_key="test")
+    assert client.model == "anthropic/claude-sonnet-4"
+    assert "openrouter.ai" in client.base_url
+
+
 def test_parse_json_response_plain():
     result = parse_json_response('{"score": 88}')
     assert result["score"] == 88

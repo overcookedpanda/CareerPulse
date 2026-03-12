@@ -1,16 +1,19 @@
 import { chromium } from 'playwright';
+import { mkdir } from 'fs/promises';
 
 const BASE = 'http://localhost:8085';
-const OUT = 'app/static/screenshots';
+const OUT = 'screenshots/launch';
+
+await mkdir(OUT, { recursive: true });
 
 const browser = await chromium.launch();
 const context = await browser.newContext({
-  viewport: { width: 1440, height: 900 },
+  viewport: { width: 1080, height: 1350 },
   deviceScaleFactor: 2,
 });
 const page = await context.newPage();
 
-// Set dark theme
+// Force dark mode
 await page.goto(BASE);
 await page.evaluate(() => {
   document.documentElement.setAttribute('data-theme', 'dark');
@@ -18,61 +21,102 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(500);
 
-// 1. Dashboard
-await page.goto(`${BASE}/#/stats`);
-await page.waitForTimeout(2000);
-await page.screenshot({ path: `${OUT}/dashboard.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-console.log('✓ dashboard');
-
-// 2. Job feed
-await page.goto(`${BASE}/#/`);
-await page.waitForTimeout(2000);
-await page.screenshot({ path: `${OUT}/feed.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-console.log('✓ feed');
-
-// 3. Job detail - click first job if available
-const firstCard = await page.$('.job-card');
-if (firstCard) {
-  await firstCard.click();
-  await page.waitForTimeout(2000);
-  await page.screenshot({ path: `${OUT}/job-detail.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-  console.log('✓ job-detail');
-
-  // Scroll down to see more of the detail
-  await page.evaluate(() => window.scrollBy(0, 400));
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}/job-detail-lower.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-  console.log('✓ job-detail-lower');
+async function shot(name, { fullPage } = {}) {
+  const opts = fullPage
+    ? { path: `${OUT}/${name}.png`, fullPage: true }
+    : { path: `${OUT}/${name}.png`, clip: { x: 0, y: 0, width: 1080, height: 1350 } };
+  await page.screenshot(opts);
+  console.log(`✓ ${name}`);
 }
 
-// 4. Settings
+// 1. Job feed - hero shot
+await page.goto(`${BASE}/#/`);
+await page.waitForTimeout(2000);
+await shot('01-job-feed');
+
+// 2. Job feed - full scroll
+await shot('02-job-feed-full', { fullPage: true });
+
+// 3. Job detail - top (prepared job with high score)
+await page.goto(`${BASE}/#/job/1`);
+await page.waitForTimeout(2000);
+await shot('03-job-detail-top');
+
+// 4. Job detail - scroll to score/match section
+await page.evaluate(() => window.scrollBy(0, 500));
+await page.waitForTimeout(500);
+await shot('04-job-detail-score');
+
+// 5. Job detail - scroll to application/cover letter area
+await page.evaluate(() => window.scrollBy(0, 500));
+await page.waitForTimeout(500);
+await shot('05-job-detail-application');
+
+// 6. Job detail - full page
+await page.goto(`${BASE}/#/job/1`);
+await page.waitForTimeout(2000);
+await shot('06-job-detail-full', { fullPage: true });
+
+// 7. Stats/dashboard
+await page.goto(`${BASE}/#/stats`);
+await page.waitForTimeout(2000);
+await shot('07-stats');
+
+// 8. Stats full page
+await shot('08-stats-full', { fullPage: true });
+
+// 9. Settings - AI provider section
 await page.goto(`${BASE}/#/settings`);
 await page.waitForTimeout(2000);
-await page.screenshot({ path: `${OUT}/settings.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-console.log('✓ settings');
+await shot('09-settings-ai');
 
-// Scroll settings to show ATS / analysis
+// 10. Settings - scroll to profile section
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(300);
+await shot('10-settings-profile');
+
+// 11. Settings - scroll to resume/ATS analysis
+await page.evaluate(() => window.scrollBy(0, 800));
+await page.waitForTimeout(500);
+await shot('11-settings-resume');
+
+// 12. Settings - scroll further to search terms
 await page.evaluate(() => window.scrollBy(0, 600));
 await page.waitForTimeout(500);
-await page.screenshot({ path: `${OUT}/settings-analysis.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-console.log('✓ settings-analysis');
+await shot('12-settings-search');
 
-// 5. Keyboard shortcuts modal
+// 13. Settings full page
+await page.goto(`${BASE}/#/settings`);
+await page.waitForTimeout(2000);
+await shot('13-settings-full', { fullPage: true });
+
+// 14. Keyboard shortcuts modal
 await page.goto(`${BASE}/#/`);
-await page.waitForTimeout(1000);
+await page.waitForTimeout(1500);
 await page.keyboard.press('?');
 await page.waitForTimeout(500);
-await page.screenshot({ path: `${OUT}/shortcuts.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-console.log('✓ shortcuts');
+await shot('14-keyboard-shortcuts');
 
-// 6. Light mode feed for contrast
-await page.evaluate(() => {
-  document.documentElement.setAttribute('data-theme', 'light');
+// 15. Job feed - second high-scoring job for variety
+const jobs = await page.evaluate(async () => {
+  const resp = await fetch('/api/jobs?sort=score&limit=5');
+  return (await resp.json()).jobs;
 });
-await page.keyboard.press('Escape');
-await page.waitForTimeout(500);
-await page.screenshot({ path: `${OUT}/feed-light.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
-console.log('✓ feed-light');
+if (jobs.length > 1) {
+  await page.goto(`${BASE}/#/job/${jobs[1].id}`);
+  await page.waitForTimeout(2000);
+  await shot('15-job-detail-alt');
+  await page.evaluate(() => window.scrollBy(0, 500));
+  await page.waitForTimeout(500);
+  await shot('16-job-detail-alt-score');
+}
+
+// 17. Job feed - another high-scoring detail for variety
+if (jobs.length > 2) {
+  await page.goto(`${BASE}/#/job/${jobs[2].id}`);
+  await page.waitForTimeout(2000);
+  await shot('17-job-detail-third');
+}
 
 await browser.close();
-console.log('\nDone! Screenshots saved to', OUT);
+console.log(`\nDone! ${OUT}/`);
