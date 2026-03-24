@@ -11,6 +11,11 @@ from app.scrapers.base import BaseScraper, JobListing
 logger = logging.getLogger(__name__)
 
 
+class _DiceGone(Exception):
+    """Raised when a Dice detail page returns 410 Gone."""
+    pass
+
+
 class DiceScraper(BaseScraper):
     source_name = "dice"
 
@@ -94,12 +99,20 @@ class DiceScraper(BaseScraper):
         return None, None
 
     async def _fetch_full_description(self, client: httpx.AsyncClient, url: str) -> str | None:
-        """Fetch the full job description from a Dice detail page."""
+        """Fetch the full job description from a Dice detail page.
+
+        Returns description text, or None if unavailable.
+        Raises _DiceGone if the listing has been removed (410).
+        """
         if not url:
             return None
         try:
             resp = await self.rate_limited_get(client, url)
+            if resp.status_code == 410:
+                raise _DiceGone(url)
             resp.raise_for_status()
+        except _DiceGone:
+            raise
         except Exception as e:
             logger.debug(f"Dice detail fetch failed for {url}: {e}")
             return None
@@ -176,10 +189,23 @@ class DiceScraper(BaseScraper):
                             tags.extend(job["workplaceTypes"])
 
                         detail_url = job.get("detailsPageUrl", "")
+                        # Programmatic jobs use apply-redirect URLs with no detail page;
+                        # construct the real detail URL from the guid instead
+                        if "/apply-redirect" in detail_url:
+                            guid = job.get("guid", "")
+                            if guid:
+                                detail_url = f"https://www.dice.com/job-detail/{guid}"
+                            else:
+                                detail_url = ""
+
                         description = job.get("summary", "")
-                        full_desc = await self._fetch_full_description(client, detail_url)
-                        if full_desc:
-                            description = full_desc
+                        try:
+                            full_desc = await self._fetch_full_description(client, detail_url)
+                            if full_desc:
+                                description = full_desc
+                        except _DiceGone:
+                            logger.debug(f"Dice listing gone (410): {title}")
+                            continue
 
                         all_jobs.append(
                             JobListing(
