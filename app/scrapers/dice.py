@@ -4,6 +4,7 @@ import re
 from urllib.parse import quote_plus, urlencode
 
 import httpx
+from bs4 import BeautifulSoup
 
 from app.scrapers.base import BaseScraper, JobListing
 
@@ -92,6 +93,35 @@ class DiceScraper(BaseScraper):
             return clean_numbers[0], None
         return None, None
 
+    async def _fetch_full_description(self, client: httpx.AsyncClient, url: str) -> str | None:
+        """Fetch the full job description from a Dice detail page."""
+        if not url:
+            return None
+        try:
+            resp = await self.rate_limited_get(client, url)
+            resp.raise_for_status()
+        except Exception as e:
+            logger.debug(f"Dice detail fetch failed for {url}: {e}")
+            return None
+        soup = BeautifulSoup(resp.content, "html.parser")
+        # Try JSON-LD first — Dice renders descriptions client-side but includes them in structured data
+        for script in soup.select('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(script.string)
+                desc_html = data.get("description", "")
+                if desc_html:
+                    text = BeautifulSoup(desc_html, "html.parser").get_text(separator="\n", strip=True)
+                    if len(text) > 100:
+                        return text
+            except (json.JSONDecodeError, TypeError):
+                continue
+        # Fallback to DOM selectors
+        el = soup.select_one('[data-testid="jobDescriptionHtml"], .job-description, #jobDescription')
+        if el:
+            text = el.get_text(separator="\n", strip=True)
+            return text if len(text) > 100 else None
+        return None
+
     async def scrape(self) -> list[JobListing]:
         queries = self.search_terms[:10] if self.search_terms else ["devops remote", "SRE remote", "platform engineer remote"]
         all_jobs = []
@@ -145,13 +175,19 @@ class DiceScraper(BaseScraper):
                         if job.get("workplaceTypes"):
                             tags.extend(job["workplaceTypes"])
 
+                        detail_url = job.get("detailsPageUrl", "")
+                        description = job.get("summary", "")
+                        full_desc = await self._fetch_full_description(client, detail_url)
+                        if full_desc:
+                            description = full_desc
+
                         all_jobs.append(
                             JobListing(
                                 title=title,
                                 company=job.get("companyName", ""),
                                 location=location,
-                                description=job.get("summary", ""),
-                                url=job.get("detailsPageUrl", ""),
+                                description=description,
+                                url=detail_url,
                                 source=self.source_name,
                                 salary_min=salary_min,
                                 salary_max=salary_max,
